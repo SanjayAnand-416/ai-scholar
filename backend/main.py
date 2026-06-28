@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from routers import profile
+from routers import documents, profile
 
 app = FastAPI(title="AI Scholar API", version="0.1.0")
 
@@ -17,6 +17,7 @@ app.add_middleware(
 )
 
 app.include_router(profile.router)
+app.include_router(documents.router)
 
 
 @app.get("/health")

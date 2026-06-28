@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, UUID4, model_validator
 
 
@@ -61,3 +61,34 @@ class ProfilePatch(BaseModel):
     def writable_fields(self) -> dict:
         """Return only explicitly set (non-None) fields for a partial update."""
         return {k: v for k, v in self.model_dump().items() if v is not None}
+
+
+# ─── Documents ────────────────────────────────────────────────────────────────
+
+# Valid status values from the documents.status CHECK constraint (§5.2.2).
+DOCUMENT_STATUSES = frozenset({"uploaded", "processing", "ready", "failed", "deleted"})
+
+
+class DocumentResponse(BaseModel):
+    """Public representation of a documents row (Appendix B.2).
+
+    storage_path and file_hash are internal-only and intentionally absent.
+    """
+    id: UUID4
+    title: Optional[str] = None
+    original_file_name: str
+    file_type: str
+    file_size_bytes: Optional[int] = None
+    status: str
+    total_pages: Optional[int] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DocumentListResponse(BaseModel):
+    """Paginated list envelope (§6.1 convention)."""
+    data: List[DocumentResponse]
+    page: int
+    page_size: int
+    total: int
