@@ -47,6 +47,39 @@ ai-scholar/
     └── AI_Scholar_Design_Document.pdf
 ```
 
+## Phase 0 Cross-Reference Completion (§3.7)
+
+The following Phase 0 items from the design document cross-reference table are complete:
+
+| Item | Status |
+| ---- | ------ |
+| Supabase project created and linked | ✅ |
+| pgvector extension enabled | ✅ |
+| Supabase Auth configured (email/password) | ✅ |
+| Private `documents` Storage bucket created | ✅ |
+| `profiles` table with all §5.2.1 columns | ✅ |
+| `handle_new_user` trigger (auto-creates profile on signup) | ✅ |
+| `set_updated_at()` shared trigger function | ✅ |
+| `documents` table (structure only, §5.2.2) with status CHECK and `(user_id, file_hash)` unique | ✅ |
+| RLS enabled + `own_profile_only` policy on `profiles` | ✅ |
+| RLS enabled + `own_documents_only` policy on `documents` | ✅ |
+| `idx_documents_user_status` index | ✅ |
+| `GET /v1/profile` — returns caller's profile, fields per Appendix B.1 | ✅ |
+| `PATCH /v1/profile` — writable fields only; email read-only; server-managed fields → 422 | ✅ |
+| Next.js frontend skeleton with Supabase auth (sign up, sign in, session) | ✅ |
+| FastAPI backend skeleton with JWT verification middleware | ✅ |
+
+Verified at runtime (2026-06-28):
+- Fresh signup → profiles row auto-created by trigger ✅
+- `PATCH /v1/profile` with `email`, `id`, `created_at`, `updated_at` → 422 `read_only_field` ✅
+- User B cannot read User A's `profiles` or `documents` row (RLS blocks it) ✅
+
+Not yet built (Phase 1+):
+- `document_pages`, `document_chunks`, `conversations`, `messages`, `message_sources`
+- pgvector embeddings, `match_chunks` function, HNSW index
+- `POST /v1/documents` and all other Phase 1+ endpoints
+- Quiz, study-plan, career tables (Phase 2/3)
+
 ## Current Implementation Status
 
 Implemented:
