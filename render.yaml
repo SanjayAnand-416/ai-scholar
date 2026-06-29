@@ -2,7 +2,6 @@ services:
   - type: web
     name: ai-scholar-api
     runtime: python
-    pythonVersion: "3.11.11"
     rootDir: backend
     plan: free
     buildCommand: pip install -r requirements.txt
