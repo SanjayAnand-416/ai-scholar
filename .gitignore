@@ -146,6 +146,3 @@ vite.config.ts.timestamp-*
 .venv/
 __pycache__/
 *.pyc
-
-# Project-specific folders
-problems/
