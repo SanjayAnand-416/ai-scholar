@@ -22,7 +22,7 @@ Later phases extend the same foundation into:
 - **Backend:** FastAPI, Python, Pydantic
 - **Auth:** Supabase Auth
 - **Database:** Supabase Postgres
-- **Vector Search:** pgvector with `text-embedding-3-small` sized embeddings
+- **Vector Search:** pgvector with Gemini `text-embedding-004` sized embeddings
 - **Storage:** Supabase Storage for private document uploads
 
 ## Repository Structure
@@ -46,6 +46,39 @@ ai-scholar/
 └── documents/
     └── AI_Scholar_Design_Document.pdf
 ```
+
+## Phase 0 Cross-Reference Completion (§3.7)
+
+The following Phase 0 items from the design document cross-reference table are complete:
+
+| Item | Status |
+| ---- | ------ |
+| Supabase project created and linked | ✅ |
+| pgvector extension enabled | ✅ |
+| Supabase Auth configured (email/password) | ✅ |
+| Private `documents` Storage bucket created | ✅ |
+| `profiles` table with all §5.2.1 columns | ✅ |
+| `handle_new_user` trigger (auto-creates profile on signup) | ✅ |
+| `set_updated_at()` shared trigger function | ✅ |
+| `documents` table (structure only, §5.2.2) with status CHECK and `(user_id, file_hash)` unique | ✅ |
+| RLS enabled + `own_profile_only` policy on `profiles` | ✅ |
+| RLS enabled + `own_documents_only` policy on `documents` | ✅ |
+| `idx_documents_user_status` index | ✅ |
+| `GET /v1/profile` — returns caller's profile, fields per Appendix B.1 | ✅ |
+| `PATCH /v1/profile` — writable fields only; email read-only; server-managed fields → 422 | ✅ |
+| Next.js frontend skeleton with Supabase auth (sign up, sign in, session) | ✅ |
+| FastAPI backend skeleton with JWT verification middleware | ✅ |
+
+Verified at runtime (2026-06-28):
+- Fresh signup → profiles row auto-created by trigger ✅
+- `PATCH /v1/profile` with `email`, `id`, `created_at`, `updated_at` → 422 `read_only_field` ✅
+- User B cannot read User A's `profiles` or `documents` row (RLS blocks it) ✅
+
+Not yet built (Phase 1+):
+- `document_pages`, `document_chunks`, `conversations`, `messages`, `message_sources`
+- pgvector embeddings, `match_chunks` function, HNSW index
+- `POST /v1/documents` and all other Phase 1+ endpoints
+- Quiz, study-plan, career tables (Phase 2/3)
 
 ## Current Implementation Status
 
@@ -83,7 +116,11 @@ Create a backend `.env` file in `backend/`:
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_SECRET_KEY=your_supabase_service_role_key
 CORS_ORIGINS=http://localhost:3000
-PORT=5000
+PORT=5001
+EMBEDDING_PROVIDER=local
+GEMINI_API_KEY=your_gemini_api_key
+GROQ_API_KEY=your_groq_api_key
+HUGGINGFACE_API_KEY=your_huggingface_api_key_optional
 ```
 
 Create a frontend `.env.local` file in `frontend/`:
@@ -91,7 +128,7 @@ Create a frontend `.env.local` file in `frontend/`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_API_URL=http://localhost:5001
 ```
 
 Keep the Supabase service-role key server-side only. Do not expose it to the frontend.
@@ -121,13 +158,13 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 5000
+uvicorn main:app --reload --host 0.0.0.0 --port 5001
 ```
 
 Health check:
 
 ```bash
-curl http://localhost:5000/health
+curl http://localhost:5001/health
 ```
 
 ## Running the Frontend
