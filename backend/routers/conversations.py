@@ -255,14 +255,14 @@ async def send_message(
 
     # ── 7. Build response (sources resolved from RPC result, not a DB re-query) ─
     resolved_sources = [
-        MessageSourceResponse(
-            chunk_id=c["id"],
-            document_id=c.get("document_id"),
-            start_page=c.get("start_page"),
-            end_page=c.get("end_page"),
-            similarity_score=c.get("similarity_score"),
-            rank=i + 1,
-        )
+        {
+            "chunk_id": c["id"],
+            "document_id": c.get("document_id"),
+            "start_page": c.get("start_page"),
+            "end_page": c.get("end_page"),
+            "similarity_score": c.get("similarity_score"),
+            "rank": i + 1,
+        }
         for i, c in enumerate(chunks)
     ]
 

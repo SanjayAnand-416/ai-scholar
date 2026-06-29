@@ -2,7 +2,7 @@
 from groq import AsyncGroq
 from config import get_settings
 
-_MODEL = "llama-3.1-70b-versatile"
+_MODEL = "llama-3.3-70b-versatile"
 
 _SYSTEM = """\
 You are an AI study assistant. Answer the student's question using ONLY the document \
