@@ -92,3 +92,59 @@ class DocumentListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+# ─── Conversations & Messages ─────────────────────────────────────────────────
+
+class ConversationCreate(BaseModel):
+    document_id: Optional[UUID4] = None
+    title: Optional[str] = None
+
+
+class ConversationResponse(BaseModel):
+    id: UUID4
+    document_id: Optional[UUID4] = None
+    title: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationListResponse(BaseModel):
+    data: List[ConversationResponse]
+    page: int
+    page_size: int
+    total: int
+
+
+class MessageSourceResponse(BaseModel):
+    chunk_id: Optional[UUID4] = None
+    document_id: Optional[UUID4] = None
+    start_page: Optional[int] = None
+    end_page: Optional[int] = None
+    similarity_score: Optional[float] = None
+    rank: Optional[int] = None
+
+
+class MessageResponse(BaseModel):
+    id: UUID4
+    role: str
+    content: str
+    created_at: datetime
+    sources: List[MessageSourceResponse] = []
+
+
+class MessageListResponse(BaseModel):
+    data: List[MessageResponse]
+    page: int
+    page_size: int
+    total: int
+
+
+class MessageCreate(BaseModel):
+    content: str
+
+
+class RAGResponse(BaseModel):
+    """Response from POST /v1/conversations/{id}/messages."""
+    user_message: MessageResponse
+    assistant_message: MessageResponse

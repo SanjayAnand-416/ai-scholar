@@ -22,7 +22,7 @@ Later phases extend the same foundation into:
 - **Backend:** FastAPI, Python, Pydantic
 - **Auth:** Supabase Auth
 - **Database:** Supabase Postgres
-- **Vector Search:** pgvector with `text-embedding-3-small` sized embeddings
+- **Vector Search:** pgvector with Gemini `text-embedding-004` sized embeddings
 - **Storage:** Supabase Storage for private document uploads
 
 ## Repository Structure
@@ -116,7 +116,11 @@ Create a backend `.env` file in `backend/`:
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_SECRET_KEY=your_supabase_service_role_key
 CORS_ORIGINS=http://localhost:3000
-PORT=5000
+PORT=5001
+EMBEDDING_PROVIDER=local
+GEMINI_API_KEY=your_gemini_api_key
+GROQ_API_KEY=your_groq_api_key
+HUGGINGFACE_API_KEY=your_huggingface_api_key_optional
 ```
 
 Create a frontend `.env.local` file in `frontend/`:
@@ -124,7 +128,7 @@ Create a frontend `.env.local` file in `frontend/`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_API_URL=http://localhost:5001
 ```
 
 Keep the Supabase service-role key server-side only. Do not expose it to the frontend.
@@ -154,13 +158,13 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 5000
+uvicorn main:app --reload --host 0.0.0.0 --port 5001
 ```
 
 Health check:
 
 ```bash
-curl http://localhost:5000/health
+curl http://localhost:5001/health
 ```
 
 ## Running the Frontend

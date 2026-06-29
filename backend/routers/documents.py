@@ -2,11 +2,12 @@ import hashlib
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, status
 
 from auth import get_current_user_id
 from database import get_admin_client
 from models import DocumentListResponse, DocumentResponse
+from tasks import process_document
 
 router = APIRouter(prefix="/v1/documents", tags=["documents"])
 
@@ -60,6 +61,7 @@ def _get_own_document(document_id: str, user_id: str) -> dict:
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     file: UploadFile,
+    background_tasks: BackgroundTasks,
     title: Optional[str] = Query(default=None, description="Optional document title"),
     user_id: str = Depends(get_current_user_id),
 ):
@@ -157,6 +159,9 @@ async def upload_document(
             detail={"error": {"code": "db_error", "message": "Failed to create document record."}},
         )
 
+    # Kick off PDF processing after the 201 response is sent.
+    background_tasks.add_task(process_document, doc_id, file_bytes)
+
     return _to_doc_response(result.data[0])
 
 
@@ -205,6 +210,42 @@ async def get_document(
             detail={"error": {"code": "not_found", "message": "Document not found."}},
         )
     return _to_doc_response(row)
+
+
+# ─── POST /v1/documents/{document_id}/reprocess ──────────────────────────────
+
+@router.post("/{document_id}/reprocess", response_model=DocumentResponse)
+async def reprocess_document(
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Restart processing for a stuck or failed document using the stored PDF."""
+    row = _get_own_document(document_id, user_id)
+    if row["status"] == "deleted":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "not_found", "message": "Document not found."}},
+        )
+
+    try:
+        file_bytes = get_admin_client().storage.from_(_BUCKET).download(row["storage_path"])
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": {"code": "storage_error", "message": "Failed to download stored PDF."}},
+        ) from exc
+
+    updated = (
+        get_admin_client()
+        .table("documents")
+        .update({"status": "uploaded", "error_message": None, "total_pages": None})
+        .eq("id", document_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    background_tasks.add_task(process_document, document_id, file_bytes, True)
+    return _to_doc_response((updated.data or [row])[0])
 
 
 # ─── DELETE /v1/documents/{document_id} ──────────────────────────────────────
