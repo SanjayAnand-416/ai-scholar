@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import type { Profile } from "@/lib/api";
@@ -14,7 +14,7 @@ export interface AppUser {
 
 export function useAppUser() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<AppUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -23,7 +23,7 @@ export function useAppUser() {
 
   useEffect(() => {
     const dark = localStorage.getItem("aisch-dark") === "1";
-    setIsDark(dark);
+    queueMicrotask(() => setIsDark(dark));
     document.documentElement.classList.toggle("dark", dark);
   }, []);
 
@@ -48,7 +48,7 @@ export function useAppUser() {
       if (session) setAccessToken(session.access_token);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [router, supabase.auth]);
 
   const toggleDark = useCallback(() => {
     const next = !isDark;
@@ -60,7 +60,7 @@ export function useAppUser() {
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     router.replace("/");
-  }, []);
+  }, [router, supabase.auth]);
 
   return { user, profile, accessToken, isDark, toggleDark, signOut, loading, setProfile };
 }

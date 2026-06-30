@@ -1,33 +1,72 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import { useAppUser } from "@/components/useAppUser";
 import { useDocs, type Document, type DocumentStatus } from "@/lib/docs-store";
 import { api } from "@/lib/api";
-import { Search, FileText, Trash2, Inbox, Plus, MessageSquare, Loader } from "lucide-react";
-
-const STATUS_COLORS: Record<DocumentStatus, [string, string]> = {
-  uploaded:   ["var(--status-uploaded)",   "var(--status-uploaded-bg)"],
-  processing: ["var(--status-processing)", "var(--status-processing-bg)"],
-  ready:      ["var(--status-ready)",      "var(--status-ready-bg)"],
-  failed:     ["var(--status-failed)",     "var(--status-failed-bg)"],
-  deleted:    ["var(--text-muted)",        "var(--line-soft)"],
-};
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  FileText,
+  Filter,
+  Inbox,
+  Library,
+  Loader,
+  MessageSquare,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 
 const STATUS_LABELS: Record<DocumentStatus, string> = {
-  uploaded:   "Queued",
+  uploaded: "Queued",
   processing: "Processing",
-  ready:      "Ready",
-  failed:     "Failed",
-  deleted:    "Deleted",
+  ready: "Ready",
+  failed: "Failed",
+  deleted: "Deleted",
 };
+
+const STATUS_CLASSES: Record<DocumentStatus, string> = {
+  uploaded: "border-cyan-200/20 bg-cyan-200/10 text-cyan-100",
+  processing: "border-amber-200/20 bg-amber-200/10 text-amber-100",
+  ready: "border-emerald-200/20 bg-emerald-200/10 text-emerald-100",
+  failed: "border-rose-200/20 bg-rose-200/10 text-rose-100",
+  deleted: "border-white/10 bg-white/[0.04] text-white/38",
+};
+
+const STATUSES: Array<DocumentStatus | "all"> = ["all", "ready", "processing", "failed"];
 
 function fmt(bytes: number | null) {
   if (!bytes) return "";
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#05070d]">
+      <div className="rounded-[28px] border border-white/10 bg-white/[0.06] p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+        <div className="mx-auto h-10 w-10 rounded-full border-4 border-white/10 border-t-cyan-200 [animation:aisch-spin_0.7s_linear_infinite]" />
+        <p className="mt-4 text-sm font-black text-white/52">Opening library...</p>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: DocumentStatus }) {
+  const spinning = status === "processing" || status === "uploaded";
+
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black ${STATUS_CLASSES[status]}`}>
+      <span className={`h-1.5 w-1.5 rounded-full bg-current ${spinning ? "[animation:aisch-pulse_1.5s_ease_infinite]" : ""}`} />
+      {STATUS_LABELS[status]}
+    </span>
+  );
 }
 
 function DocCard({
@@ -41,71 +80,98 @@ function DocCard({
   onChat: (id: string) => void;
   chatting: boolean;
 }) {
-  const [hover, setHover] = useState(false);
-  const [fc, bg] = STATUS_COLORS[doc.status];
-  const spinning = doc.status === "processing" || doc.status === "uploaded";
+  const canChat = doc.status === "ready" && !chatting;
+  const progress = doc.status === "ready" ? 100 : doc.status === "failed" ? 100 : doc.status === "processing" ? 68 : 34;
+  const failed = doc.status === "failed";
 
   return (
-    <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        background: "var(--surface-card)", border: "1px solid var(--line)",
-        borderRadius: "var(--radius-lg)", padding: "20px",
-        boxShadow: hover ? "var(--shadow-md)" : "var(--shadow-sm)",
-        transform: hover ? "translateY(-2px)" : "none",
-        transition: "all var(--dur-base) var(--ease-standard)",
-        display: "flex", flexDirection: "column", gap: 14,
-      }}
-    >
-      {/* Thumbnail */}
-      <div style={{ height: 100, borderRadius: "var(--radius-md)", background: "var(--gradient-card)", border: "1px solid var(--line-soft)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", color: "var(--indigo-200)" }}>
-        <FileText size={32} strokeWidth={1.5} />
-        <div style={{ position: "absolute", top: 8, right: 8 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: bg, color: fc, borderRadius: "var(--radius-pill)", fontSize: 11, fontWeight: 700 }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: fc, animation: spinning ? "aisch-pulse 1.5s ease infinite" : "none" }} />
-            {STATUS_LABELS[doc.status]}
+    <article className="aisch-surface-soft group flex min-h-[310px] flex-col overflow-hidden rounded-[28px] p-4 transition-all duration-300 hover:-translate-y-1 hover:bg-white/[0.085]">
+      <div className="relative overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br from-cyan-300/12 via-white/[0.04] to-indigo-300/10 p-4">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-cyan-200/14 blur-2xl" />
+        <div className="relative flex items-start justify-between gap-4">
+          <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border ${failed ? "border-rose-200/20 bg-rose-200/10 text-rose-100" : "border-white/10 bg-white/[0.07] text-cyan-100/75"}`}>
+            {failed ? <AlertCircle size={25} /> : <FileText size={25} strokeWidth={1.65} />}
           </span>
+          <StatusBadge status={doc.status} />
+        </div>
+
+        <div className="relative mt-8">
+          <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${failed ? "bg-rose-300" : "bg-gradient-to-r from-cyan-300 to-indigo-300"}`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs font-bold text-white/36">{doc.status === "ready" ? "Citation-ready" : failed ? "Needs review" : "Processing pipeline"}</p>
         </div>
       </div>
 
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 5, letterSpacing: "-0.01em", lineHeight: 1.3 }}>
-          {doc.title ?? doc.original_file_name}
-        </div>
-        <div style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-muted)" }}>
-          {fmt(doc.file_size_bytes)}{doc.total_pages ? ` · ${doc.total_pages} pp` : ""}
-        </div>
-      </div>
+      <div className="flex flex-1 flex-col pt-4">
+        <h3 className="line-clamp-2 text-base font-black leading-6 text-white">{doc.title ?? doc.original_file_name}</h3>
+        <p className="mt-2 line-clamp-1 font-mono text-xs font-semibold text-white/34">
+          {fmt(doc.file_size_bytes)}
+          {doc.total_pages ? ` · ${doc.total_pages} pp` : ""}
+          {doc.updated_at ? ` · updated ${new Date(doc.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+        </p>
+        {doc.status === "failed" && doc.error_message ? <p className="mt-3 line-clamp-2 text-xs font-bold leading-5 text-rose-100">{doc.error_message}</p> : null}
 
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          disabled={doc.status !== "ready" || chatting}
-          onClick={() => onChat(doc.id)}
-          style={{
-            flex: 1, height: 34, border: "none",
-            borderRadius: "var(--radius-sm)",
-            background: doc.status === "ready" ? "var(--gradient-primary)" : "var(--line-soft)",
-            fontFamily: "var(--font-sans)", fontSize: 13, fontWeight: 600,
-            color: doc.status === "ready" ? "#fff" : "var(--text-muted)",
-            cursor: doc.status === "ready" && !chatting ? "pointer" : "not-allowed",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            boxShadow: doc.status === "ready" ? "0 4px 10px rgba(99,102,241,0.25)" : "none",
-            transition: "all var(--dur-base)",
-          }}
-        >
-          {chatting ? <Loader size={13} strokeWidth={2} style={{ animation: "aisch-spin 0.7s linear infinite" }} /> : <MessageSquare size={13} strokeWidth={2} />}
-          {chatting ? "Opening…" : "Chat"}
-        </button>
-        <button onClick={() => onDelete(doc.id)} style={{ width: 34, height: 34, border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", background: "var(--bg-app)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--status-failed)" }}>
-          <Trash2 size={14} strokeWidth={1.75} />
-        </button>
+        <div className="mt-auto flex gap-2 pt-5">
+          <button
+            disabled={!canChat}
+            onClick={() => onChat(doc.id)}
+            className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-black transition-all duration-300 ${
+              canChat ? "aisch-button-primary" : "cursor-not-allowed bg-white/[0.06] text-white/30"
+            }`}
+          >
+            {chatting ? <Loader size={15} className="animate-spin" /> : <MessageSquare size={15} />}
+            {chatting ? "Opening" : "Chat"}
+          </button>
+          <button
+            onClick={() => onDelete(doc.id)}
+            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-200/15 bg-rose-200/10 text-rose-100/70 transition-all duration-300 hover:-translate-y-0.5 hover:bg-rose-200/14 hover:text-rose-100"
+            aria-label="Delete document"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
+    </article>
+  );
+}
+
+function LibrarySkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="rounded-[28px] border border-white/10 bg-white/[0.055] p-4 shadow-2xl shadow-black/10 backdrop-blur-xl">
+          <div className="h-32 rounded-[24px] bg-white/[0.08] [animation:aisch-pulse_1.4s_ease-in-out_infinite]" />
+          <div className="mt-5 h-4 w-3/4 rounded-full bg-white/[0.1] [animation:aisch-pulse_1.4s_ease-in-out_infinite]" />
+          <div className="mt-3 h-3 w-1/2 rounded-full bg-white/[0.07] [animation:aisch-pulse_1.4s_ease-in-out_infinite]" />
+          <div className="mt-8 h-11 rounded-2xl bg-white/[0.07] [animation:aisch-pulse_1.4s_ease-in-out_infinite]" />
+        </div>
+      ))}
     </div>
   );
 }
 
-const STATUSES: Array<DocumentStatus | "all"> = ["all", "ready", "processing", "failed"];
+function EmptyState({ hasQuery, onUpload }: { hasQuery: boolean; onUpload: () => void }) {
+  return (
+    <div className="aisch-surface rounded-[32px] px-6 py-16 text-center">
+      <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-[26px] border border-white/10 bg-white/[0.07] text-white/45">
+        <Inbox size={34} />
+      </div>
+      <h3 className="mt-6 text-2xl font-black text-white">{hasQuery ? "No matching documents" : "Your library is empty"}</h3>
+      <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-white/44">
+        {hasQuery ? "Try a different search, filter, or sort option." : "Upload your first PDF to unlock grounded chat and study tools."}
+      </p>
+      {!hasQuery && (
+        <button onClick={onUpload} className="aisch-button-primary mt-7 inline-flex h-11 items-center gap-2 rounded-2xl px-5 text-sm font-black">
+          <UploadCloud size={17} /> Upload PDF
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function LibraryPage() {
   const router = useRouter();
@@ -127,98 +193,165 @@ export default function LibraryPage() {
     }
   }
 
-  if (loading || !user) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-app)" }}>
-        <div style={{ width: 32, height: 32, border: "3px solid var(--indigo-200)", borderTopColor: "var(--indigo-500)", borderRadius: "50%", animation: "aisch-spin 0.7s linear infinite" }} />
-      </div>
-    );
-  }
+  const visible = useMemo(() => {
+    let next = docs.filter((doc) => !q || (doc.title ?? doc.original_file_name).toLowerCase().includes(q.toLowerCase()));
+    if (filter !== "all") next = next.filter((doc) => doc.status === filter);
+    if (sort === "name") return [...next].sort((a, b) => (a.title ?? a.original_file_name).localeCompare(b.title ?? b.original_file_name));
+    if (sort === "oldest") return [...next].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return next;
+  }, [docs, filter, q, sort]);
 
-  let visible = docs.filter((d) =>
-    !q || (d.title ?? d.original_file_name).toLowerCase().includes(q.toLowerCase())
-  );
-  if (filter !== "all") visible = visible.filter((d) => d.status === filter);
-  if (sort === "name") visible = [...visible].sort((a, b) => (a.title ?? a.original_file_name).localeCompare(b.title ?? b.original_file_name));
-  else if (sort === "oldest") visible = [...visible].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  if (loading || !user) return <LoadingScreen />;
+
+  const ready = docs.filter((doc) => doc.status === "ready").length;
+  const processing = docs.filter((doc) => doc.status === "processing" || doc.status === "uploaded").length;
+  const failed = docs.filter((doc) => doc.status === "failed").length;
+  const hasQuery = Boolean(q || filter !== "all");
 
   const uploadBtn = (
-    <button onClick={() => router.push("/upload")} style={{ height: 38, padding: "0 16px", background: "var(--gradient-primary)", border: "none", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontSize: 14, fontWeight: 600, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 7, boxShadow: "0 4px 12px rgba(99,102,241,0.3)" }}>
-      <Plus size={16} strokeWidth={2} /> Upload PDF
+    <button onClick={() => router.push("/upload")} className="aisch-button-primary inline-flex h-11 items-center gap-2 rounded-2xl px-4 text-sm font-black">
+      <Plus size={16} /> Upload PDF
     </button>
   );
 
   return (
     <AppShell user={user} title="Document library" subtitle="All your uploaded study materials" actions={uploadBtn} isDark={isDark} onToggleDark={toggleDark} onSignOut={signOut}>
-      {/* Toolbar */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 24, flexWrap: "wrap" }}>
-        <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
-          <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}>
-            <Search size={16} strokeWidth={1.75} />
-          </div>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search documents…" style={{ width: "100%", height: 40, padding: "0 14px 0 36px", fontFamily: "var(--font-sans)", fontSize: 14, color: "var(--text-primary)", background: "var(--surface-card)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-md)", outline: "none", boxSizing: "border-box" }} />
-        </div>
-        <div style={{ display: "flex", gap: 4, background: "var(--line-soft)", borderRadius: "var(--radius-md)", padding: 4 }}>
-          {STATUSES.map((s) => (
-            <button key={s} onClick={() => setFilter(s)} style={{ height: 32, padding: "0 12px", border: "none", borderRadius: "var(--radius-sm)", fontFamily: "var(--font-sans)", fontSize: 13, fontWeight: 600, cursor: "pointer", background: filter === s ? "var(--surface-card)" : "transparent", color: filter === s ? "var(--text-primary)" : "var(--text-muted)", boxShadow: filter === s ? "var(--shadow-sm)" : "none", transition: "all var(--dur-fast)" }}>
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-            </button>
-          ))}
-        </div>
-        <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ height: 40, padding: "0 12px", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-md)", background: "var(--surface-card)", fontFamily: "var(--font-sans)", fontSize: 13.5, color: "var(--text-primary)", outline: "none", cursor: "pointer" }}>
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="name">Name A–Z</option>
-        </select>
-      </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-6">
+          <section className="aisch-surface overflow-hidden rounded-[32px] p-5 sm:p-6">
+            <div className="mb-6 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-100/70">Knowledge vault</p>
+                <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">Study materials, ready when you are.</h2>
+                <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-white/50">
+                  Search, filter, and open citation-ready chats from one consistent workspace.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 sm:min-w-[300px]">
+                {[
+                  ["Total", docs.length],
+                  ["Ready", ready],
+                  ["Review", failed],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.055] p-3 text-center">
+                    <p className="text-2xl font-black text-white">{value}</p>
+                    <p className="mt-1 text-[11px] font-black uppercase tracking-[0.1em] text-white/34">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-      {/* Loading state */}
-      {docsLoading && docs.length === 0 && (
-        <div style={{ textAlign: "center", padding: "48px 0", color: "var(--text-muted)" }}>
-          <div style={{ width: 28, height: 28, border: "3px solid var(--indigo-200)", borderTopColor: "var(--indigo-500)", borderRadius: "50%", animation: "aisch-spin 0.7s linear infinite", margin: "0 auto 12px" }} />
-          Loading your documents…
-        </div>
-      )}
+            <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_auto_auto] xl:items-center">
+              <div className="relative min-w-0">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/34" size={17} />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search documents..."
+                  className="aisch-field h-12 w-full rounded-2xl px-11 text-sm font-semibold outline-none"
+                />
+              </div>
 
-      {/* Empty state */}
-      {!docsLoading && visible.length === 0 && (
-        <div style={{ textAlign: "center", padding: "72px 24px", background: "var(--surface-card)", border: "1px solid var(--line)", borderRadius: "var(--radius-xl)" }}>
-          <div style={{ color: "var(--text-muted)", marginBottom: 16, display: "flex", justifyContent: "center" }}>
-            <Inbox size={40} strokeWidth={1.5} />
-          </div>
-          <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>
-            {q || filter !== "all" ? "No matching documents" : "Your library is empty"}
-          </h3>
-          <p style={{ margin: "0 0 20px", fontSize: 14, color: "var(--text-muted)" }}>
-            {q || filter !== "all" ? "Try a different search or filter." : "Upload your first PDF to get started."}
-          </p>
-          {!q && filter === "all" && (
-            <button onClick={() => router.push("/upload")} style={{ padding: "10px 22px", background: "var(--gradient-primary)", border: "none", borderRadius: "var(--radius-md)", color: "#fff", fontSize: 14.5, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-sans)", boxShadow: "var(--shadow-primary)" }}>
-              Upload PDF
-            </button>
+              <div className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5">
+                {STATUSES.map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setFilter(status)}
+                    className={`h-9 rounded-xl px-4 text-xs font-black capitalize transition-all duration-300 ${
+                      filter === status ? "bg-cyan-100 text-slate-950 shadow-lg shadow-cyan-300/10" : "text-white/48 hover:bg-white/[0.07] hover:text-white"
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+
+              <label className="relative">
+                <Filter className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/34" size={16} />
+                <select value={sort} onChange={(e) => setSort(e.target.value)} className="aisch-field h-12 w-full rounded-2xl px-11 pr-4 text-sm font-bold outline-none xl:w-[180px]">
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="name">Name A-Z</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          {docsLoading && docs.length === 0 ? (
+            <LibrarySkeleton />
+          ) : visible.length === 0 ? (
+            <EmptyState hasQuery={hasQuery} onUpload={() => router.push("/upload")} />
+          ) : (
+            <section>
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-bold text-white/42">
+                  {visible.length} document{visible.length !== 1 ? "s" : ""} shown
+                </p>
+                {hasQuery && (
+                  <button
+                    onClick={() => {
+                      setQ("");
+                      setFilter("all");
+                    }}
+                    className="w-fit rounded-full border border-white/10 bg-white/[0.055] px-3 py-1.5 text-xs font-black text-white/48 transition-colors hover:bg-white/[0.09] hover:text-white"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+                {visible.map((doc) => (
+                  <DocCard key={doc.id} doc={doc} onDelete={removeDoc} onChat={handleChat} chatting={chattingId === doc.id} />
+                ))}
+              </div>
+            </section>
           )}
         </div>
-      )}
 
-      {/* Grid */}
-      {visible.length > 0 && (
-        <>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-            {visible.length} document{visible.length !== 1 ? "s" : ""}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
-            {visible.map((d) => (
-              <DocCard
-                key={d.id}
-                doc={d}
-                onDelete={removeDoc}
-                onChat={handleChat}
-                chatting={chattingId === d.id}
-              />
-            ))}
-          </div>
-        </>
-      )}
+        <aside className="space-y-6">
+          <section className="aisch-surface-soft rounded-[32px] p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-100/62">Library health</p>
+                <h3 className="mt-2 text-xl font-black text-white">Document pipeline</h3>
+              </div>
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-200 text-slate-950">
+                <Library size={19} />
+              </span>
+            </div>
+            <div className="mt-5 space-y-3">
+              {[
+                { label: "Ready to chat", value: ready, Icon: CheckCircle2, tone: "border-emerald-200/20 bg-emerald-200/10 text-emerald-100" },
+                { label: "Processing", value: processing, Icon: Loader, tone: "border-amber-200/20 bg-amber-200/10 text-amber-100" },
+                { label: "Needs review", value: failed, Icon: AlertCircle, tone: "border-rose-200/20 bg-rose-200/10 text-rose-100" },
+              ].map(({ label, value, Icon, tone }) => (
+                <div key={label} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.045] p-3">
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${tone}`}>
+                    <Icon size={17} className={Icon === Loader ? "animate-spin" : ""} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-black text-white">{value}</span>
+                    <span className="mt-0.5 block text-xs font-bold text-white/38">{label}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="aisch-surface overflow-hidden rounded-[32px] p-5 text-white">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-200 text-slate-950">
+              <Sparkles size={20} />
+            </span>
+            <h3 className="mt-5 text-xl font-black">Library workflow</h3>
+            <p className="mt-3 text-sm font-semibold leading-6 text-white/50">
+              Ready documents can open a grounded chat. Processing documents stay visible so upload status never feels hidden.
+            </p>
+            <button onClick={() => router.push("/upload")} className="aisch-button-secondary mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-sm font-black">
+              Upload more <ArrowRight size={16} />
+            </button>
+          </section>
+        </aside>
+      </div>
     </AppShell>
   );
 }

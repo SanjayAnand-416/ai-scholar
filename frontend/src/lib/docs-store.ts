@@ -37,8 +37,14 @@ export function useDocs(token: string | null) {
   // Initial load + conditional polling — only while docs are in-progress
   useEffect(() => {
     if (!token) return;
-    setLoading(true);
-    fetchDocs(token).finally(() => setLoading(false));
+    let cancelled = false;
+
+    queueMicrotask(async () => {
+      if (cancelled) return;
+      setLoading(true);
+      await fetchDocs(token);
+      if (!cancelled) setLoading(false);
+    });
 
     pollRef.current = setInterval(async () => {
       if (!hasInProgress(docsRef.current)) return; // skip when all settled
@@ -49,6 +55,7 @@ export function useDocs(token: string | null) {
     }, POLL_INTERVAL_MS);
 
     return () => {
+      cancelled = true;
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [token, fetchDocs]);
