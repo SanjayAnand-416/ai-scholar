@@ -76,7 +76,7 @@
   --accent-500:  var(--indigo-500);
 
   /* ── Typography ── */
-  --font-sans:  Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans:  var(--font-plus-jakarta, "Plus Jakarta Sans"), Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono:  "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
   --font-serif: var(--font-sans);
 
@@ -212,4 +212,280 @@ a:hover { color: var(--indigo-600); }
 @keyframes aisch-fadein {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+.aisch-grid-bg {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at 50% 24%, black, transparent 68%);
+}
+
+.aisch-dark-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.aisch-noise {
+  background-image:
+    radial-gradient(circle at 25% 25%, rgba(99, 102, 241, 0.08) 0 1px, transparent 1px),
+    radial-gradient(circle at 70% 40%, rgba(6, 182, 212, 0.08) 0 1px, transparent 1px),
+    radial-gradient(circle at 45% 80%, rgba(16, 185, 129, 0.07) 0 1px, transparent 1px);
+  background-size: 34px 34px, 46px 46px, 62px 62px;
+}
+
+.aisch-luxury-grain {
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(255,255,255,0.11) 0 1px, transparent 1px),
+    radial-gradient(circle at 78% 36%, rgba(255,255,255,0.08) 0 1px, transparent 1px),
+    radial-gradient(circle at 42% 82%, rgba(255,255,255,0.07) 0 1px, transparent 1px);
+  background-size: 38px 38px, 54px 54px, 72px 72px;
+}
+
+.aisch-surface {
+  background: linear-gradient(135deg, rgba(255,255,255,0.085), rgba(255,255,255,0.045));
+  border: 1px solid rgba(255,255,255,0.11);
+  box-shadow: 0 24px 70px rgba(0,0,0,0.22);
+  backdrop-filter: blur(22px);
+}
+
+.aisch-surface-soft {
+  background: rgba(255,255,255,0.065);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 18px 48px rgba(0,0,0,0.16);
+  backdrop-filter: blur(18px);
+}
+
+.aisch-field {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.92);
+  transition: border-color 180ms var(--ease-out), background 180ms var(--ease-out), box-shadow 180ms var(--ease-out);
+}
+
+.aisch-field::placeholder {
+  color: rgba(255,255,255,0.36);
+}
+
+.aisch-field:focus {
+  border-color: rgba(125,211,252,0.55);
+  box-shadow: 0 0 0 4px rgba(34,211,238,0.12);
+}
+
+.aisch-chat-input:focus,
+.aisch-chat-input:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
+.aisch-button-primary {
+  background: linear-gradient(135deg, #67e8f9 0%, #818cf8 100%);
+  color: #05070d;
+  box-shadow: 0 18px 38px rgba(34,211,238,0.18);
+  transition: transform 220ms var(--ease-out), box-shadow 220ms var(--ease-out), filter 220ms var(--ease-out);
+}
+
+.aisch-button-primary:hover {
+  filter: brightness(1.06);
+  transform: translateY(-2px);
+  box-shadow: 0 22px 46px rgba(34,211,238,0.24);
+}
+
+.aisch-button-secondary {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.82);
+  transition: transform 220ms var(--ease-out), background 220ms var(--ease-out), color 220ms var(--ease-out);
+}
+
+.aisch-button-secondary:hover {
+  background: rgba(255,255,255,0.11);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.aisch-page-title {
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.aisch-muted {
+  color: rgba(255,255,255,0.48);
+}
+
+.aisch-kicker {
+  color: rgba(125,211,252,0.82);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.aisch-divider {
+  border-color: rgba(255,255,255,0.1);
+}
+
+.aisch-reveal {
+  animation: aisch-reveal 760ms var(--ease-out) both;
+}
+
+.aisch-delay-2 {
+  animation-delay: 140ms;
+}
+
+.aisch-stagger {
+  animation: aisch-reveal 680ms var(--ease-out) both;
+}
+
+.aisch-link {
+  position: relative;
+}
+
+.aisch-link::after {
+  background: linear-gradient(90deg, #2563eb, #4338ca);
+  border-radius: 999px;
+  bottom: -6px;
+  content: "";
+  height: 2px;
+  left: 0;
+  position: absolute;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 220ms var(--ease-out);
+  width: 100%;
+}
+
+.aisch-link:hover::after {
+  transform: scaleX(1);
+}
+
+.aisch-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.aisch-card::before {
+  background: radial-gradient(circle at var(--x, 50%) var(--y, 0%), rgba(79, 70, 229, 0.12), transparent 34%);
+  content: "";
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 260ms var(--ease-out);
+}
+
+.aisch-card:hover::before {
+  opacity: 1;
+}
+
+.aisch-magnetic:active {
+  transform: scale(0.98);
+}
+
+.aisch-faq[open] {
+  border-color: rgba(79, 70, 229, 0.28);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.06);
+}
+
+.aisch-float {
+  animation: aisch-float-large 7s ease-in-out infinite;
+}
+
+.aisch-float-slow {
+  animation: aisch-float-large 8.5s ease-in-out infinite;
+}
+
+.aisch-float-slower {
+  animation: aisch-float-large 10s ease-in-out infinite;
+}
+
+.aisch-bar {
+  animation: aisch-bar-rise 900ms var(--ease-out) both;
+  transform-origin: bottom;
+}
+
+.aisch-gradient-card {
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    linear-gradient(135deg, rgba(37, 99, 235, 0.24), rgba(124, 58, 237, 0.2), rgba(6, 182, 212, 0.22)) border-box;
+}
+
+.aisch-marquee {
+  animation: aisch-marquee 26s linear infinite;
+}
+
+.aisch-marquee-slow {
+  animation: aisch-marquee 42s linear infinite;
+}
+
+.aisch-particle {
+  animation: aisch-particle 8s ease-in-out infinite;
+}
+
+.aisch-tilt:hover {
+  transform: translateY(-4px) rotate(-1deg);
+}
+
+@keyframes aisch-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes aisch-float-large {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes aisch-bar-rise {
+  from {
+    transform: scaleY(0.28);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes aisch-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes aisch-particle {
+  0%, 100% {
+    opacity: 0.15;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: translate3d(12px, -18px, 0) scale(1.35);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
 }
