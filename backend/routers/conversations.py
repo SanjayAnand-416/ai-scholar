@@ -1,8 +1,11 @@
 """Conversations and RAG-messages endpoints — §6.3."""
 import asyncio
-from typing import Optional
+import logging
+import time
+from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+import httpx
 
 from auth import get_current_user_id
 from database import get_admin_client
@@ -18,9 +21,36 @@ from models import (
 )
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
+logger = logging.getLogger(__name__)
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
+
+_TRANSIENT_DB_ERRORS = (
+    httpx.RemoteProtocolError,
+    httpx.ConnectError,
+    httpx.ReadError,
+    httpx.ReadTimeout,
+    httpx.WriteError,
+    httpx.WriteTimeout,
+    httpx.PoolTimeout,
+)
+
+
+def _execute_db(call: Callable[[], Any], message: str = "Database service temporarily unavailable.") -> Any:
+    for attempt in range(2):
+        try:
+            return call()
+        except _TRANSIENT_DB_ERRORS as exc:
+            if attempt == 0:
+                time.sleep(0.2)
+                continue
+            logger.warning("Supabase request failed after retry: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"error": {"code": "db_unavailable", "message": message}},
+            ) from exc
+
 
 def _to_conv(row: dict) -> ConversationResponse:
     return ConversationResponse(
@@ -33,14 +63,16 @@ def _to_conv(row: dict) -> ConversationResponse:
 
 
 def _get_own_conversation(conversation_id: str, user_id: str) -> dict:
-    result = (
-        get_admin_client()
-        .table("conversations")
-        .select("*")
-        .eq("id", conversation_id)
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
+    result = _execute_db(
+        lambda: (
+            get_admin_client()
+            .table("conversations")
+            .select("*")
+            .eq("id", conversation_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
     )
     if not result.data:
         raise HTTPException(
@@ -83,7 +115,10 @@ async def create_conversation(
     if body.title:
         payload["title"] = body.title
 
-    result = get_admin_client().table("conversations").insert(payload).execute()
+    result = _execute_db(
+        lambda: get_admin_client().table("conversations").insert(payload).execute(),
+        "Failed to create conversation because the database is temporarily unavailable.",
+    )
     if not result.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -101,14 +136,16 @@ async def list_conversations(
     user_id: str = Depends(get_current_user_id),
 ):
     offset = (page - 1) * page_size
-    result = (
-        get_admin_client()
-        .table("conversations")
-        .select("*", count="exact")
-        .eq("user_id", user_id)
-        .order("updated_at", desc=True)
-        .range(offset, offset + page_size - 1)
-        .execute()
+    result = _execute_db(
+        lambda: (
+            get_admin_client()
+            .table("conversations")
+            .select("*", count="exact")
+            .eq("user_id", user_id)
+            .order("updated_at", desc=True)
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
     )
     return ConversationListResponse(
         data=[_to_conv(r) for r in (result.data or [])],
@@ -130,14 +167,16 @@ async def list_messages(
     _get_own_conversation(conversation_id, user_id)
 
     offset = (page - 1) * page_size
-    msgs_result = (
-        get_admin_client()
-        .table("messages")
-        .select("*", count="exact")
-        .eq("conversation_id", conversation_id)
-        .order("created_at")
-        .range(offset, offset + page_size - 1)
-        .execute()
+    msgs_result = _execute_db(
+        lambda: (
+            get_admin_client()
+            .table("messages")
+            .select("*", count="exact")
+            .eq("conversation_id", conversation_id)
+            .order("created_at")
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
     )
     msgs = msgs_result.data or []
 
@@ -145,13 +184,15 @@ async def list_messages(
     asst_ids = [m["id"] for m in msgs if m["role"] == "assistant"]
     sources_by_msg: dict[str, list[dict]] = {}
     if asst_ids:
-        src_result = (
-            get_admin_client()
-            .table("message_sources")
-            .select("message_id, chunk_id, similarity_score, rank, document_chunks(document_id, start_page, end_page)")
-            .in_("message_id", asst_ids)
-            .order("rank")
-            .execute()
+        src_result = _execute_db(
+            lambda: (
+                get_admin_client()
+                .table("message_sources")
+                .select("message_id, chunk_id, similarity_score, rank, document_chunks(document_id, start_page, end_page)")
+                .in_("message_id", asst_ids)
+                .order("rank")
+                .execute()
+            )
         )
         for s in (src_result.data or []):
             chunk = s.get("document_chunks") or {}
@@ -209,7 +250,10 @@ async def send_message(
         "filter_doc_ids": [doc_id] if doc_id else None,
     }
     rpc_result = await asyncio.to_thread(
-        lambda: get_admin_client().rpc("match_chunks", rpc_params).execute()
+        lambda: _execute_db(
+            lambda: get_admin_client().rpc("match_chunks", rpc_params).execute(),
+            "Failed to retrieve document context because the database is temporarily unavailable.",
+        )
     )
     chunks = rpc_result.data or []
 
@@ -223,22 +267,26 @@ async def send_message(
         ) from exc
 
     # ── 4. Persist user message ───────────────────────────────────────────────
-    user_msg_row = (
-        get_admin_client()
-        .table("messages")
-        .insert({"conversation_id": conversation_id, "role": "user", "content": body.content})
-        .execute()
-        .data[0]
-    )
+    user_msg_row = _execute_db(
+        lambda: (
+            get_admin_client()
+            .table("messages")
+            .insert({"conversation_id": conversation_id, "role": "user", "content": body.content})
+            .execute()
+        ),
+        "Failed to save your message because the database is temporarily unavailable.",
+    ).data[0]
 
     # ── 5. Persist assistant message ──────────────────────────────────────────
-    asst_msg_row = (
-        get_admin_client()
-        .table("messages")
-        .insert({"conversation_id": conversation_id, "role": "assistant", "content": answer})
-        .execute()
-        .data[0]
-    )
+    asst_msg_row = _execute_db(
+        lambda: (
+            get_admin_client()
+            .table("messages")
+            .insert({"conversation_id": conversation_id, "role": "assistant", "content": answer})
+            .execute()
+        ),
+        "Failed to save the assistant response because the database is temporarily unavailable.",
+    ).data[0]
 
     # ── 6. Persist message_sources (one row per retrieved chunk) ──────────────
     if chunks:
@@ -251,7 +299,10 @@ async def send_message(
             }
             for i, c in enumerate(chunks)
         ]
-        get_admin_client().table("message_sources").insert(sources_rows).execute()
+        _execute_db(
+            lambda: get_admin_client().table("message_sources").insert(sources_rows).execute(),
+            "Failed to save response sources because the database is temporarily unavailable.",
+        )
 
     # ── 7. Build response (sources resolved from RPC result, not a DB re-query) ─
     resolved_sources = [
@@ -267,7 +318,10 @@ async def send_message(
     ]
 
     # Touch conversation updated_at so list ordering reflects recent activity
-    get_admin_client().table("conversations").update({"updated_at": "now()"}).eq("id", conversation_id).execute()
+    _execute_db(
+        lambda: get_admin_client().table("conversations").update({"updated_at": "now()"}).eq("id", conversation_id).execute(),
+        "Failed to update conversation activity because the database is temporarily unavailable.",
+    )
 
     return RAGResponse(
         user_message=_build_message(user_msg_row, []),
