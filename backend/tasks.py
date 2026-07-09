@@ -7,13 +7,14 @@ from database import get_admin_client
 logger = logging.getLogger(__name__)
 
 
-async def process_document(document_id: str, file_bytes: bytes, reset_existing: bool = False) -> None:
+async def process_document(document_id: str, user_id: str, file_bytes: bytes, reset_existing: bool = False) -> None:
     """PDF → pages → chunks → Gemini embeddings → Supabase.
 
     Status transitions: uploaded → processing → ready | failed
     """
     from services.pdf_processor import extract_pages, chunk_pages
     from services.embeddings import embed_batch, format_vector
+    from services.knowledge_graph import build_knowledge_graph
 
     db = get_admin_client()
 
@@ -82,6 +83,11 @@ async def process_document(document_id: str, file_bytes: bytes, reset_existing: 
             "total_pages": len(pages),
             "error_message": None,
         }).eq("id", document_id).execute()
+
+        # ── 8. Knowledge graph pipeline hook (Phase 1.5) ───────────────────
+        # Never allowed to revert status = 'ready' on failure; see
+        # build_knowledge_graph's own top-level catch.
+        await build_knowledge_graph(document_id, user_id)
 
     except Exception as exc:
         logger.exception("Processing failed for document %s", document_id)

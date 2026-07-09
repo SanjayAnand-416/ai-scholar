@@ -160,7 +160,7 @@ async def upload_document(
         )
 
     # Kick off PDF processing after the 201 response is sent.
-    background_tasks.add_task(process_document, doc_id, file_bytes)
+    background_tasks.add_task(process_document, doc_id, user_id, file_bytes)
 
     return _to_doc_response(result.data[0])
 
@@ -244,7 +244,7 @@ async def reprocess_document(
         .eq("user_id", user_id)
         .execute()
     )
-    background_tasks.add_task(process_document, document_id, file_bytes, True)
+    background_tasks.add_task(process_document, document_id, user_id, file_bytes, True)
     return _to_doc_response((updated.data or [row])[0])
 
 

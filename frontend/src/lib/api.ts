@@ -92,6 +92,111 @@ export interface RAGResponse {
   assistant_message: Message;
 }
 
+// ─── Knowledge graph ────────────────────────────────────────────────────────
+
+export interface GraphNode {
+  id: string;
+  type: "document" | "topic";
+  label: string;
+  subject: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  type: "covers" | "similar" | "prerequisite" | "related";
+  strength: number | null;
+}
+
+export interface KnowledgeGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface RebuildResponse {
+  queued_count: number;
+  estimated_seconds: number;
+}
+
+export interface SimilarDocument {
+  document_id: string;
+  title: string | null;
+  similarity_score: number;
+  shared_topics: string[];
+}
+
+export interface SimilarDocumentsResponse {
+  data: SimilarDocument[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+// ─── Quizzes ────────────────────────────────────────────────────────────────
+
+export type QuestionType = "mcq" | "true_false" | "fill_blank" | "short_answer";
+export type QuizDifficulty = "easy" | "medium" | "hard";
+
+export interface QuizQuestion {
+  id: string;
+  question_text: string;
+  question_type: QuestionType;
+  options: { choices: string[] } | null;
+  correct_answer: string | null;
+  explanation: string | null;
+}
+
+export interface Quiz {
+  id: string;
+  user_id: string;
+  document_id: string | null;
+  topic_id: string | null;
+  title: string | null;
+  difficulty: QuizDifficulty | null;
+  created_at: string;
+  questions: QuizQuestion[];
+}
+
+export interface QuizAttempt {
+  id: string;
+  quiz_id: string;
+  user_id: string;
+  score: number | null;
+  total_questions: number | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface QuizAnswer {
+  id: string;
+  attempt_id: string;
+  question_id: string;
+  selected_answer: string | null;
+  is_correct: boolean | null;
+}
+
+// ─── Flashcards ─────────────────────────────────────────────────────────────
+
+export interface Flashcard {
+  id: string;
+  user_id: string;
+  document_id: string | null;
+  topic_id: string | null;
+  front: string;
+  back: string;
+  is_known: boolean;
+  last_reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface FlashcardListResponse {
+  data: Flashcard[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
 // ─── Fetch helpers ─────────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
@@ -171,4 +276,63 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ content }),
     }),
+
+  // Knowledge graph
+  getKnowledgeGraph: (token: string) =>
+    apiFetch<KnowledgeGraph>("/v1/knowledge-graph", token),
+
+  rebuildKnowledgeGraph: (token: string) =>
+    apiFetch<RebuildResponse>("/v1/knowledge-graph/rebuild", token, { method: "POST" }),
+
+  getSimilarDocuments: (token: string, documentId: string) =>
+    apiFetch<SimilarDocumentsResponse>(`/v1/documents/${documentId}/similar`, token),
+
+  // Quizzes
+  generateQuiz: (token: string, body: { document_id?: string; topic_id?: string; difficulty?: QuizDifficulty; question_count?: number }) =>
+    apiFetch<Quiz>("/v1/quizzes", token, { method: "POST", body: JSON.stringify(body) }),
+
+  getQuiz: (token: string, quizId: string, reveal = false) =>
+    apiFetch<Quiz>(`/v1/quizzes/${quizId}${reveal ? "?reveal=true" : ""}`, token),
+
+  startQuizAttempt: (token: string, quizId: string) =>
+    apiFetch<QuizAttempt>(`/v1/quizzes/${quizId}/attempts`, token, { method: "POST" }),
+
+  submitQuizAnswer: (token: string, attemptId: string, questionId: string, selectedAnswer: string | null) =>
+    apiFetch<QuizAnswer>(`/v1/quiz-attempts/${attemptId}/answers`, token, {
+      method: "POST",
+      body: JSON.stringify({ question_id: questionId, selected_answer: selectedAnswer }),
+    }),
+
+  completeQuizAttempt: (token: string, attemptId: string) =>
+    apiFetch<QuizAttempt>(`/v1/quiz-attempts/${attemptId}/complete`, token, { method: "POST" }),
+
+  // Flashcards
+  generateFlashcards: (token: string, body: { document_id?: string; topic_id?: string; card_count?: number }) =>
+    apiFetch<FlashcardListResponse>("/v1/flashcards", token, { method: "POST", body: JSON.stringify(body) }),
+
+  listFlashcards: (token: string, params: { document_id?: string; topic_id?: string; page?: number; page_size?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.document_id) q.set("document_id", params.document_id);
+    if (params.topic_id) q.set("topic_id", params.topic_id);
+    q.set("page", String(params.page ?? 1));
+    q.set("page_size", String(params.page_size ?? 100));
+    return apiFetch<FlashcardListResponse>(`/v1/flashcards?${q.toString()}`, token);
+  },
+
+  reviewFlashcard: (token: string, id: string, isKnown: boolean) =>
+    apiFetch<Flashcard>(`/v1/flashcards/${id}/review`, token, {
+      method: "PATCH",
+      body: JSON.stringify({ is_known: isKnown }),
+    }),
+
+  deleteFlashcard: async (token: string, id: string) => {
+    const res = await fetch(`${API_URL}/v1/flashcards/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok && res.status !== 204) {
+      const body = await res.json().catch(() => ({}));
+      throw body;
+    }
+  },
 };
