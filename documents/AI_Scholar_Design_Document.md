@@ -25,6 +25,18 @@ Date:              June 28, 2026
           This document supersedes the standalone project-plan and schema-design drafts.
 See §6 for the API contract layer and Appendix A/B for the reconciliation changelog and field-parity
                                               tables.
+
+Current implementation note. The repository has moved beyond the original contract in
+three important ways:
+• Embeddings now use Gemini text-embedding-004 with pgvector vector(768), applied by
+  migration 20260628120000_phase1_vector_768.sql. References below to OpenAI
+  text-embedding-3-small/vector(1536) describe the original design baseline, not the
+  active schema after migrations.
+• Generation and topic extraction use Groq models in the backend services, not Anthropic.
+• Phase 1.5 knowledge graph APIs and the Phase 2/2b learning-tool APIs are implemented
+  in the backend. The frontend currently includes the knowledge graph and flashcards pages;
+  quiz, study-plan, and weak-topic APIs exist even where dedicated frontend pages are still
+  pending.
 Contents
 1 Core Insight Before You Build                                                                   3
   1.1 What Changes Because This Is a Learning Platform . . . . . . . . . . . . . . . .            3
@@ -170,7 +182,7 @@ value.
 
 
                    FastAPI Backend                        LLM / Embedding APIs
-              ingestion, RAG orchestration             Anthropic + OpenAI embeddings
+              ingestion, RAG orchestration             Groq + Gemini embeddings
 
 
 
@@ -181,11 +193,11 @@ value.
 2.1 Recommended Tech Stack
 • Frontend: Next.js / React.
 • Backend: FastAPI (Python) — best ecosystem for the AI/RAG side.
-• LLM orchestration: Anthropic API for generation; LangChain/LlamaIndex used lightly
+• LLM orchestration: implemented with Groq for generation; LangChain/LlamaIndex used lightly
   if at all (they can become a black box).
-• Embedding model (finalized): OpenAI text-embedding-3-small, dimension 1536.
-  The embedding model is independent of the generation model, so pairing OpenAI embeddings
-  with Anthropic generation is standard practice. This decision is locked before Phase 1 begins
+• Embedding model (implemented): Gemini text-embedding-004, dimension 768.
+  The embedding model is independent of the generation model, so pairing Gemini embeddings
+  with Groq generation is valid. This decision is locked before production data exists
   — see §5.1.1 for why it cannot be deferred.
 • Vector database: pgvector inside Supabase Postgres.
 • File storage: Supabase Storage, private bucket.
@@ -327,9 +339,10 @@ unfinished mess.
 5.1.1 Embedding Dimension — A Phase 0 Decision, Not a Deferred One
 pgvector’s vector(N) type requires a fixed dimension at column creation. There is no “decide
 later” option: changing the dimension after documents have been embedded means dropping
-the column and re-embedding every chunk from scratch. The model is therefore finalized now:
-OpenAI text-embedding-3-small, vector(1536). If a different model is substituted later,
-every vector(1536) column and the match chunks function signature below must be updated
+the column and re-embedding every chunk from scratch. The active implementation is
+Gemini text-embedding-004, vector(768), applied by migration
+20260628120000_phase1_vector_768.sql. If a different model is substituted later,
+every vector(768) column and the match chunks function signature must be updated
 together.
 
 5.2 Phase 0 — Identity and Document Foundation
@@ -464,7 +477,7 @@ CREATE TABLE document_chunks (
     token_count INTEGER,
     start_page INTEGER NOT NULL,
     end_page INTEGER NOT NULL,
-    embedding VECTOR(1536) NOT NULL, -- text-embedding-3-small
+    embedding VECTOR(768) NOT NULL, -- Gemini text-embedding-004 after active migration
     metadata JSONB DEFAULT ’{}’::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (document_id, chunk_index),
@@ -553,6 +566,12 @@ retrieved context rather than hallucinated — one of the most differentiated fe
 RAG project.
 
 5.4 Phase 2 — Learning Tools Layer
+Current implementation note. Migration 20260706100000_phase2_learning_tools.sql is
+the active Phase 2 schema source. It adds quizzes.topic_id as a foreign key to topics,
+does not rely on a persisted quizzes.question_count column, and records progress from
+completed quiz attempts. Migration 20260707100000_phase2b_flashcards.sql adds the
+flashcards table as a fast-follow Phase 2b feature.
+
 5.4.1 quizzes
 CREATE TABLE quizzes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -946,7 +965,7 @@ faster search.
 
 5.8.3 Vector search RPC function
 CREATE OR REPLACE FUNCTION match_chunks(
-    query_embedding VECTOR(1536),
+    query_embedding VECTOR(768),
     match_count INTEGER,
     filter_user_id UUID,
     filter_doc_ids UUID[] DEFAULT NULL
@@ -1035,7 +1054,7 @@ on each cited chunk.
  3. Create profiles, the handle new user trigger, and the shared set updated at function.
  4. Create documents with its status CHECK constraint and (user id, file hash) uniqueness.
  5. Create document pages with its UNIQUE(document id, page number) constraint.
- 6. Create document chunks with the vector(1536) column and the composite foreign keys
+ 6. Create document chunks with the vector(768) column and the composite foreign keys
     into document pages.
  7. Apply Row-Level Security — enable and write the policy — on every table created so far,
     before writing any application code that reads them.
@@ -1272,7 +1291,7 @@ Response 201:
   }
 }
 
-Server flow, matching §5.9.2 exactly: embed content with text-embedding-3-small → call
+Server flow, matching §5.9.2 exactly: embed content with Gemini text-embedding-004 → call
 match chunks(query embedding, match count, filter user id, filter doc ids) with filter user id
 from the verified JWT and filter doc ids taken from the conversation’s document id (or NULL
 
@@ -1280,7 +1299,7 @@ from the verified JWT and filter doc ids taken from the conversation’s documen
 AI Scholar — Unified Design Document                                                       24
 
 
-to search all of the user’s documents) → assemble the prompt → call the Anthropic API →
+to search all of the user’s documents) → assemble the prompt → call the Groq API →
 insert messages (role=’assistant’) → insert one message sources row per retrieved chunk.
 If the embedding or generation call fails, the backend returns 503 with error.code = "llm
 unavailable" and does not insert a partial assistant message — avoiding an orphaned row
@@ -1290,7 +1309,7 @@ that a retry would duplicate.
 POST /v1/quizzes
 GET /v1/quizzes/{quiz_id}
 
-POST body: document id (nullable), topic (nullable), difficulty (nullable, one of easy/
+POST body: document id (nullable), topic id (nullable), difficulty (nullable, one of easy/
 medium/hard — same three values as the quizzes.difficulty CHECK), question count. The
 backend retrieves context via match chunks, generates questions, and inserts the quizzes row
 followed by its quiz questions rows, with question type restricted to the same four values
@@ -1319,14 +1338,28 @@ default to ’active’ and ’pending’ respectively, exactly matching the sch
 on an item accepts status only from the four values in study plan items.status CHECK; any
 other string returns 422 from the Pydantic model before the request ever reaches the database,
 rather than surfacing a Postgres constraint-violation error.
-PUT /v1/learning-progress
+GET /v1/learning-progress/weak-topics
 
-Deliberately PUT, not POST: the endpoint is an upsert keyed on (user id, document id,
-topic), mirroring the UNIQUE constraint on learning progress exactly. The backend issues
-INSERT ... ON CONFLICT (user id, document id, topic) DO UPDATE, so calling this end-
-point repeatedly for the same topic is always safe and never produces duplicate rows or a 409.
+The implemented learning-progress API currently exposes weak-topic discovery rather
+than a direct progress upsert endpoint. Quiz completion records progress server-side,
+then GET /v1/learning-progress/weak-topics returns topics below the weak threshold
+with prerequisite topic ids/names where available.
+
+POST /v1/flashcards
+GET /v1/flashcards
+GET /v1/flashcards/{flashcard_id}
+PATCH /v1/flashcards/{flashcard_id}/review
+DELETE /v1/flashcards/{flashcard_id}
+
+Flashcards are implemented as the Phase 2b fast-follow. They can be generated from a
+document id or topic id, listed with optional document/topic filters, marked known or
+unknown during review, and deleted.
 
 6.5 Phase 3 — Career Module
+Implementation status: the schema design for this section exists in the base migration,
+but the FastAPI routers and frontend pages are not currently implemented. Treat these
+routes as future contract notes, not current API surface.
+
 GET /v1/career-profile
 PUT /v1/career-profile
 
@@ -1384,51 +1417,56 @@ service-role key without an explicit filter would return every student’s row, 
 
 6.7 Endpoint Summary
 
-        MethodPath                                    Phase      Primary Table(s)
+        Implemented endpoint                         Phase      Primary Table(s)
         GET   /v1/profile                             0          profiles
         PATCH /v1/profile                             0          profiles
-        POST /v1/documents                            1          documents
+        POST  /v1/documents                           1          documents, storage
+        GET   /v1/documents                           1          documents
+        GET   /v1/documents/{id}                      1          documents
+        POST  /v1/documents/{id}/reprocess            1          documents, document pages,
+                                                                  document chunks
+        DELETE /v1/documents/{id}                     1          documents
+        POST  /v1/conversations                       1          conversations
+        GET   /v1/conversations                       1          conversations
+        GET   /v1/conversations/{id}/messages         1          messages, message sources
+        POST  /v1/conversations/{id}/messages         1          messages, message sources,
+                                                                  document chunks via match chunks
+        GET   /v1/knowledge-graph                     1.5        documents, topics,
+                                                                  document topics,
+                                                                  document connections,
+                                                                  topic connections
+        POST  /v1/knowledge-graph/rebuild             1.5        all knowledge graph tables
+        GET   /v1/documents/{id}/similar              1.5        document connections,
+                                                                  document topics
+        POST  /v1/quizzes                             2          quizzes, quiz questions
+        GET   /v1/quizzes/{id}                        2          quizzes, quiz questions
+        POST  /v1/quizzes/{id}/attempts               2          quiz attempts
+        POST  /v1/quiz-attempts/{id}/answers          2          quiz answers
+        POST  /v1/quiz-attempts/{id}/complete         2          quiz attempts,
+                                                                  learning progress
+        GET   /v1/learning-progress/weak-topics       2          learning progress,
+                                                                  topic connections
+        POST  /v1/study-plans                         2          study plans
+        GET   /v1/study-plans/{id}                    2          study plans
+        POST  /v1/study-plans/{id}/items              2          study plan items
+        PATCH /v1/study-plan-items/{id}               2          study plan items
+        POST  /v1/flashcards                          2b         flashcards
+        GET   /v1/flashcards                          2b         flashcards
+        GET   /v1/flashcards/{id}                     2b         flashcards
+        PATCH /v1/flashcards/{id}/review              2b         flashcards
+        DELETE /v1/flashcards/{id}                    2b         flashcards
 
-
-                     Supabase + pgvector + PostgreSQL + Next.js + FastAPI
-AI Scholar — Unified Design Document                                                    26
-
-
-
-       MethodPath                                 Phase     Primary Table(s)
-       GET   /v1/documents                        1         documents
-       GET   /v1/documents/{id}                   1         documents
-       DELETE/v1/documents/{id}                   1         documents
-       GET   /v1/documents/{id}/pages             1         document pages
-       POST /v1/conversations                     1         conversations
-       GET   /v1/conversations                    1         conversations
-       GET   /v1/conversations/{id}/messages      1         messages,
-                                                            message sources
-       POST    /v1/conversations/{id}/messages 1            messages,
-                                                            message sources,
-                                                            document chunks      (via
-                                                            match chunks)
-       POST    /v1/quizzes                        2         quizzes, quiz questions
-       GET     /v1/quizzes/{id}                   2         quizzes, quiz questions
-       POST    /v1/quizzes/{id}/attempts          2         quiz attempts
-       POST    /v1/quiz-attempts/{id}/answers     2         quiz answers
-       POST    /v1/quiz-attempts/{id}/complete    2         quiz attempts
-       POST    /v1/study-plans                    2         study plans
-       GET     /v1/study-plans/{id}               2         study plans,
-                                                            study plan items
-       POST /v1/study-plans/{id}/items            2         study plan items
-       PATCH /v1/study-plan-items/{id}            2         study plan items
-       PUT   /v1/learning-progress                2         learning progress
-       GET   /v1/career-profile                   3         career profiles
-       PUT   /v1/career-profile                   3         career profiles
-       GET   /v1/skills                           3         user skills
-       POST /v1/skills                            3         user skills
-       PATCH /v1/skills/{id}                      3         user skills
-       POST /v1/target-roles                      3         target roles
-       GET   /v1/target-roles                     3         target roles
-       POST /v1/gap-analyses                      3         gap analyses
-       GET   /v1/gap-analyses/{id}                3         gap analyses
-       GET   /v1/overview                         4         student overview
+        Future contract endpoint                      Phase      Primary Table(s)
+        GET   /v1/career-profile                      3          career profiles
+        PUT   /v1/career-profile                      3          career profiles
+        GET   /v1/skills                              3          user skills
+        POST  /v1/skills                              3          user skills
+        PATCH /v1/skills/{id}                         3          user skills
+        POST  /v1/target-roles                        3          target roles
+        GET   /v1/target-roles                        3          target roles
+        POST  /v1/gap-analyses                        3          gap analyses
+        GET   /v1/gap-analyses/{id}                   3          gap analyses
+        GET   /v1/overview                            4          student overview
 
 
 
@@ -1449,7 +1487,7 @@ document:
     page number inside metadata, which could disagree for chunks spanning a page bound-
     ary. Replaced with start page/end page columns backed by composite foreign keys into
     document pages.
- 3. Embedding dimension finalized. Locked to OpenAI text-embedding-3-small, vector(1536),
+ 3. Embedding dimension finalized. Implemented with Gemini text-embedding-004, vector(768),
     as a Phase 0 decision rather than a deferred one, since pgvector cannot change dimension
     after data exists without dropping and re-embedding.
  4. Row-Level Security completed. Every table with RLS enabled now has an explicit

@@ -193,6 +193,13 @@ Embedding models commonly used include:
 
     • E5 Embeddings
 
+Current AI Scholar implementation. The active code uses Gemini text-embedding-004
+through backend/services/embeddings.py. Supabase migration
+20260628120000_phase1_vector_768.sql updates document_chunks.embedding and the
+match_chunks RPC to use pgvector vector(768). Older design references to OpenAI
+text-embedding-3-small or vector(1536) are historical and no longer describe the
+running implementation.
+
 
 
 4     Vector Database
@@ -216,7 +223,7 @@ Popular vector databases include:
 
 
                                              6
-For the AI Scholar project, embeddings are stored using the pgvector extension within
+For the AI Scholar project, embeddings are stored using the pgvector extension within
 PostgreSQL.
 Each record generally contains:
 
@@ -229,6 +236,11 @@ Each record generally contains:
     • Metadata
 
     • Embedding Vector
+
+Current AI Scholar implementation. The vector store is Supabase Postgres with
+pgvector. The active RAG table is document_chunks, whose embedding column is
+extensions.vector(768). The match_chunks RPC performs cosine similarity search
+against the authenticated user's documents.
 
 
 
@@ -332,8 +344,28 @@ The implementation workflow is as follows:
 
   9. The Large Language Model generates a context-aware response.
 
+ 10. After a document reaches ready status, a background hook builds the knowledge
+     graph by extracting topics, embedding new topics, and creating document-topic,
+     topic-topic, and document-document edges.
+
 This architecture ensures accurate, scalable, and efficient document understanding while
 minimizing hallucinations and reducing computational cost.
+
+Implementation alignment notes:
+
+  • PDF extraction and chunking live in backend/services/pdf_processor.py.
+
+  • Embeddings live in backend/services/embeddings.py and use 768-dimensional Gemini
+    vectors.
+
+  • Grounded answer generation lives in backend/services/generation.py and uses Groq.
+
+  • Document processing is coordinated by backend/tasks.py.
+
+  • Retrieval chat is exposed through backend/routers/conversations.py.
+
+  • Knowledge graph post-processing is exposed through backend/services/knowledge_graph.py
+    and backend/routers/knowledge_graph.py.
 
 
 

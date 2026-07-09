@@ -148,3 +148,214 @@ class RAGResponse(BaseModel):
     """Response from POST /v1/conversations/{id}/messages."""
     user_message: MessageResponse
     assistant_message: MessageResponse
+
+
+# ─── Knowledge Graph (Phase 1.5) ───────────────────────────────────────────
+
+class GraphNode(BaseModel):
+    """A document or topic node, per addendum §7.8.1 / Appendix C.1."""
+    id: UUID4
+    type: str  # "document" | "topic"
+    label: str
+    subject: Optional[str] = None
+    metadata: dict = {}
+
+
+class GraphEdge(BaseModel):
+    """A covers/similar/prerequisite/related edge, per §7.8.1 / Appendix C.2."""
+    source: UUID4
+    target: UUID4
+    type: str  # "covers" | "similar" | "prerequisite" | "related"
+    strength: Optional[float] = None
+
+
+class KnowledgeGraphResponse(BaseModel):
+    """GET /v1/knowledge-graph — full per-user graph in one payload."""
+    nodes: List[GraphNode]
+    edges: List[GraphEdge]
+
+
+class RebuildResponse(BaseModel):
+    """POST /v1/knowledge-graph/rebuild."""
+    queued_count: int
+    estimated_seconds: int
+
+
+class SimilarDocumentItem(BaseModel):
+    document_id: UUID4
+    title: Optional[str] = None
+    similarity_score: float
+    shared_topics: List[str] = []
+
+
+class SimilarDocumentsListResponse(BaseModel):
+    """GET /v1/documents/{id}/similar — paginated envelope per §6.1."""
+    data: List[SimilarDocumentItem]
+    page: int
+    page_size: int
+    total: int
+
+
+# ─── Learning Tools (Phase 2) ───────────────────────────────────────────────
+
+QUESTION_TYPES = frozenset({"mcq", "true_false", "fill_blank", "short_answer"})
+DIFFICULTIES = frozenset({"easy", "medium", "hard"})
+
+
+class QuizCreate(BaseModel):
+    document_id: Optional[UUID4] = None
+    topic_id: Optional[UUID4] = None
+    difficulty: Optional[str] = None
+    question_count: int = 5
+
+    @model_validator(mode="after")
+    def require_scope(self):
+        if self.document_id is None and self.topic_id is None:
+            raise ValueError("Quizzes must be scoped to a document_id or topic_id.")
+        if self.difficulty is not None and self.difficulty not in DIFFICULTIES:
+            raise ValueError(f"difficulty must be one of {sorted(DIFFICULTIES)}.")
+        if not (1 <= self.question_count <= 20):
+            raise ValueError("question_count must be between 1 and 20.")
+        return self
+
+
+class QuizQuestionResponse(BaseModel):
+    id: UUID4
+    question_text: str
+    question_type: str
+    options: Optional[dict] = None
+    correct_answer: Optional[str] = None
+    explanation: Optional[str] = None
+
+
+class QuizResponse(BaseModel):
+    id: UUID4
+    user_id: UUID4
+    document_id: Optional[UUID4] = None
+    topic_id: Optional[UUID4] = None
+    title: Optional[str] = None
+    difficulty: Optional[str] = None
+    created_at: datetime
+    questions: List[QuizQuestionResponse] = []
+
+
+class QuizAttemptResponse(BaseModel):
+    id: UUID4
+    quiz_id: UUID4
+    user_id: UUID4
+    score: Optional[int] = None
+    total_questions: Optional[int] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class QuizAnswerCreate(BaseModel):
+    question_id: UUID4
+    selected_answer: Optional[str] = None
+
+
+class QuizAnswerResponse(BaseModel):
+    id: UUID4
+    attempt_id: UUID4
+    question_id: UUID4
+    selected_answer: Optional[str] = None
+    is_correct: Optional[bool] = None
+
+
+class WeakTopicItem(BaseModel):
+    topic: str
+    document_id: UUID4
+    progress_percentage: int
+    prerequisite_topic_ids: List[UUID4] = []
+    prerequisite_topic_names: List[str] = []
+
+
+class WeakTopicsResponse(BaseModel):
+    data: List[WeakTopicItem]
+
+
+class StudyPlanCreate(BaseModel):
+    title: Optional[str] = None
+    goal: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+class StudyPlanResponse(BaseModel):
+    id: UUID4
+    user_id: UUID4
+    title: Optional[str] = None
+    goal: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    status: str
+    created_at: datetime
+
+
+class StudyPlanItemCreate(BaseModel):
+    document_id: Optional[UUID4] = None
+    topic: Optional[str] = None
+    scheduled_date: Optional[str] = None
+    estimated_minutes: Optional[int] = None
+
+
+class StudyPlanItemPatch(BaseModel):
+    status: Optional[str] = None
+    scheduled_date: Optional[str] = None
+    estimated_minutes: Optional[int] = None
+
+    @model_validator(mode="after")
+    def validate_status(self):
+        if self.status is not None and self.status not in {"pending", "in_progress", "completed", "skipped"}:
+            raise ValueError("Invalid status value.")
+        return self
+
+
+class StudyPlanItemResponse(BaseModel):
+    id: UUID4
+    study_plan_id: UUID4
+    document_id: Optional[UUID4] = None
+    topic: Optional[str] = None
+    scheduled_date: Optional[str] = None
+    estimated_minutes: Optional[int] = None
+    status: str
+    completed_at: Optional[datetime] = None
+
+
+# ─── Flashcards (Phase 2b — fast-follow) ───────────────────────────────────
+
+class FlashcardCreate(BaseModel):
+    document_id: Optional[UUID4] = None
+    topic_id: Optional[UUID4] = None
+    card_count: int = 10
+
+    @model_validator(mode="after")
+    def require_scope(self):
+        if self.document_id is None and self.topic_id is None:
+            raise ValueError("Flashcards must be scoped to a document_id or topic_id.")
+        if not (1 <= self.card_count <= 30):
+            raise ValueError("card_count must be between 1 and 30.")
+        return self
+
+
+class FlashcardResponse(BaseModel):
+    id: UUID4
+    user_id: UUID4
+    document_id: Optional[UUID4] = None
+    topic_id: Optional[UUID4] = None
+    front: str
+    back: str
+    is_known: bool
+    last_reviewed_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class FlashcardListResponse(BaseModel):
+    data: List[FlashcardResponse]
+    page: int
+    page_size: int
+    total: int
+
+
+class FlashcardReviewPatch(BaseModel):
+    is_known: bool

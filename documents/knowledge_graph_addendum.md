@@ -7,7 +7,8 @@ AI Scholar — Knowledge Graph Extension                                 Phase 1
                          Knowledge Graph Extension
                  Phase 1.5 Addendum — Implementation-Ready Design
              A zero-destructive-migration bolt-on to the Phase 1 RAG pipeline
-         adding four new tables, one new API endpoint, and a topic-extraction hook.
+         adding four new tables, three API endpoints, a Next.js graph page,
+         and a topic-extraction hook.
 
 
                                  Prepared for: Ragu
@@ -20,6 +21,12 @@ AI Scholar — Knowledge Graph Extension                                 Phase 1
  numbering continues from that document (§7 onward, Appendix C). No table, index,
  or RLS policy defined in the main document is modified here; only additions are
  made.
+
+ Implementation status. The checked-in implementation follows this addendum with
+ two provider/dimension updates: topic extraction uses Groq
+ llama-3.3-70b-versatile through backend/services/knowledge_graph.py, and both
+ document_chunks.embedding and topics.embedding use pgvector vector(768) because
+ the active embedding provider is Gemini text-embedding-004.
 
 
 
@@ -96,8 +103,8 @@ Three relationship types drive the feature:
  The four new tables add zero columns to any existing table.
  The pipeline hook fires after status = ’ready’ — the same state transition already
   implemented.
- The frontend can display the graph before quizzes or study plans exist, making it a
-  standalone demo milestone.
+ The frontend graph page now exists at frontend/src/app/knowledge-graph/page.tsx.
+  Quizzes, study plans, and flashcards have also been added after this Phase 1.5 layer.
 
 7.3     Graph Data Model
 7.3.1       Node Types
@@ -152,7 +159,7 @@ rather than duplicates.
      name          TEXT          NOT NULL ,
      description TEXT ,
      subject_area TEXT ,
-     embedding     VECTOR (1536) ,           -- nullable ; set after
+     embedding     VECTOR (768) ,            -- nullable ; set after
         extraction
      created_at    TIMESTAMPTZ DEFAULT now () ,
      updated_at    TIMESTAMPTZ DEFAULT now () ,
@@ -171,8 +178,10 @@ rather than duplicates.
                            Listing 1: topics table definition
 
 
-  Embedding dimension. VECTOR(1536) matches document chunks.embedding so
-  that topic-to-chunk cosine comparisons use the same numeric space without rescaling.
+  Embedding dimension. The implemented schema uses VECTOR(768), matching
+  document_chunks.embedding after migration 20260628120000_phase1_vector_768.sql.
+  This keeps topic-to-chunk cosine comparisons in the same numeric space without
+  rescaling.
 
 
 7.4.3    document topics
@@ -344,10 +353,10 @@ FastAPI background task that updates the status column calls build knowledge gra
 user id) as its final step.
 
 7.7.2   Step-by-Step Post-Processing Flow
-Step 1. Topic extraction. Retrieve the top-10 highest-scoring chunks for the newly
+Step 1. Topic extraction. Retrieve the first 10 chunks for the newly
         processed document (ordered by chunk index or by a relevance proxy). Send
-        them to the Anthropic API with the extraction prompt in §7.6.3. Parse the
-        JSON response into 3–6 topic objects.
+        them to Groq llama-3.3-70b-versatile with the extraction prompt in §7.7.3.
+        Parse the JSON response into 3–6 topic objects.
 Step 2. Upsert topics. For each topic returned, execute INSERT INTO topics (...)
         ON CONFLICT (user id, name) DO UPDATE SET description = EXCLUDED.description,
         subject area = EXCLUDED.subject area. Capture the resulting id values.
@@ -355,7 +364,7 @@ Step 3. Upsert document-topic edges. For each (document, topic) pair, execute
         INSERT INTO document topics (...) ON CONFLICT (document id, topic id)
         DO UPDATE SET relevance score = EXCLUDED.relevance score, mention count
         = EXCLUDED.mention count.
-Step 4. Embed new topics. Call text-embedding-3-small for each topic whose
+Step 4. Embed new topics. Call the Gemini embedding service for each topic whose
         embedding IS NULL. Update the row.
 Step 5. Compute topic-topic similarity. Load all topic embeddings belonging to this
         user. For every pair (new topic, existing topic), compute cosine similarity.
@@ -383,7 +392,7 @@ Step 7. Populate shared topic ids. For each inserted document connections row,
 
 
 7.7.3   Topic Extraction Prompt
-The prompt below is sent to claude-sonnet-4-6 with max tokens = 512. The model is
+The prompt below is sent to Groq llama-3.3-70b-versatile with max tokens = 512. The model is
 instructed to return only valid JSON with no preamble, matching the Pydantic model on
 the FastAPI side.
  SYSTEM :
@@ -411,8 +420,9 @@ the FastAPI side.
 
 
 Fallback. If the response cannot be parsed as JSON, retry once with a stricter prompt.
-If the second parse fails, log the error, set documents.error message, and skip knowledge
-graph construction for this document without reverting status = ’ready’.
+If the second parse fails, log the error and skip knowledge graph construction for this
+document without reverting status = ’ready’. The current implementation intentionally
+does not overwrite documents.error_message for a graph-only failure.
 
 7.8     API Specification
 This section adds three endpoints to the contract layer defined in §6. Conventions from
@@ -560,22 +570,19 @@ Returns documents similar to the specified document, with shared topics.
  GET        /v1/documents/{id}/similar  document connections, document topics
 
 
- 7.9     Implementation Order
- 1. Create topics with its trigger and UNIQUE constraint.
- 2. Create document topics with its UNIQUE constraint.
- 3. Create document connections with both UNIQUE and ordering CHECK constraints.
- 4. Create topic connections with its UNIQUE constraint.
- 5. Apply RLS — enable and write the policy — on all four tables before writing any
-    application code that reads them.
- 6. Add all relational indexes from §7.5.
- 7. Implement the topic extraction function in FastAPI. Test it in isolation on one docu-
-    ment before wiring it into the pipeline hook.
- 8. Wire the hook into the existing document-processing background task (fires after
-    status = ’ready’).
- 9. Implement GET /v1/knowledge-graph and verify the response against two or more
-    uploaded documents.
-10. Add the HNSW index on topics.embedding once >500 topic rows exist.
-11. Build the Next.js graph visualisation component consuming GET /v1/knowledge-graph.
+ 7.9     Implementation Status
+ 1. Created topics with its trigger and UNIQUE constraint.
+ 2. Created document topics with its UNIQUE constraint.
+ 3. Created document connections with both UNIQUE and ordering CHECK constraints.
+ 4. Created topic connections with its UNIQUE constraint.
+ 5. Applied RLS on all four tables before application reads.
+ 6. Added relational indexes from §7.5.
+ 7. Implemented topic extraction in FastAPI using Groq.
+ 8. Wired the hook into the existing document-processing background task after
+    status = ’ready’.
+ 9. Implemented GET /v1/knowledge-graph and GET /v1/documents/{id}/similar.
+10. Deferred the HNSW index on topics.embedding until >500 topic rows exist.
+11. Built the Next.js graph visualisation page consuming GET /v1/knowledge-graph.
 
  7.10     Out of Scope for This Phase
   Manual topic editing. Allowing students to rename, merge, or delete topics adds UI

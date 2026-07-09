@@ -98,7 +98,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "Flashcards",
-    route: "/library",
+    route: "/flashcards",
     Icon: PanelTopOpen,
     eyebrow: "Memory engine",
     description: "Adaptive cards surface weak concepts at the right moment for long-term retention.",
@@ -108,7 +108,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "Quiz Generator",
-    route: "/library",
+    route: "/quiz",
     Icon: Target,
     eyebrow: "Assessment studio",
     description: "Generate quizzes from PDFs and track score trends by concept, source, and attempt.",
@@ -118,7 +118,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "Mind Maps",
-    route: "/library",
+    route: "/knowledge-graph",
     Icon: Network,
     eyebrow: "Concept graph",
     description: "Explore how ideas connect across documents, classes, and research sessions.",
