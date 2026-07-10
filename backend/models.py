@@ -281,6 +281,17 @@ class StudyPlanCreate(BaseModel):
     end_date: Optional[str] = None
 
 
+class StudyPlanItemResponse(BaseModel):
+    id: UUID4
+    study_plan_id: UUID4
+    document_id: Optional[UUID4] = None
+    topic: Optional[str] = None
+    scheduled_date: Optional[str] = None
+    estimated_minutes: Optional[int] = None
+    status: str
+    completed_at: Optional[datetime] = None
+
+
 class StudyPlanResponse(BaseModel):
     id: UUID4
     user_id: UUID4
@@ -290,6 +301,14 @@ class StudyPlanResponse(BaseModel):
     end_date: Optional[str] = None
     status: str
     created_at: datetime
+    items: List["StudyPlanItemResponse"] = []
+
+
+class StudyPlanListResponse(BaseModel):
+    data: List[StudyPlanResponse]
+    page: int
+    page_size: int
+    total: int
 
 
 class StudyPlanItemCreate(BaseModel):
@@ -309,17 +328,6 @@ class StudyPlanItemPatch(BaseModel):
         if self.status is not None and self.status not in {"pending", "in_progress", "completed", "skipped"}:
             raise ValueError("Invalid status value.")
         return self
-
-
-class StudyPlanItemResponse(BaseModel):
-    id: UUID4
-    study_plan_id: UUID4
-    document_id: Optional[UUID4] = None
-    topic: Optional[str] = None
-    scheduled_date: Optional[str] = None
-    estimated_minutes: Optional[int] = None
-    status: str
-    completed_at: Optional[datetime] = None
 
 
 # ─── Flashcards (Phase 2b — fast-follow) ───────────────────────────────────

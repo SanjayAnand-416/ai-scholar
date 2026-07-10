@@ -62,7 +62,7 @@ type NavItem = {
   description: string;
   metric: string;
   accent: PreviewTone;
-  preview: "dashboard" | "assistant" | "notes" | "flashcards" | "quiz" | "maps" | "research" | "progress" | "resources" | "pricing" | "contact";
+  preview: "dashboard" | "assistant" | "notes" | "flashcards" | "quiz" | "planner" | "maps" | "research" | "progress" | "resources" | "pricing" | "contact";
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -115,6 +115,16 @@ const NAV_ITEMS: NavItem[] = [
     metric: "91% latest score",
     accent: "rose",
     preview: "quiz",
+  },
+  {
+    label: "Study Planner",
+    route: "/study-plan",
+    Icon: GraduationCap,
+    eyebrow: "Pacing engine",
+    description: "Schedule documents and topics across a goal-driven timeline, then track item completion.",
+    metric: "Goal-tracked",
+    accent: "amber",
+    preview: "planner",
   },
   {
     label: "Mind Maps",
@@ -180,8 +190,8 @@ const NAV_ITEMS: NavItem[] = [
 
 const NAV_GROUPS = [
   { label: "Workspace", items: NAV_ITEMS.slice(0, 3) },
-  { label: "Create", items: NAV_ITEMS.slice(3, 7) },
-  { label: "Account", items: NAV_ITEMS.slice(7) },
+  { label: "Create", items: NAV_ITEMS.slice(3, 8) },
+  { label: "Account", items: NAV_ITEMS.slice(8) },
 ];
 
 const QUICK_CARDS = [
