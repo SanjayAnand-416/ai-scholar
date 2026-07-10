@@ -176,6 +176,41 @@ export interface QuizAnswer {
   is_correct: boolean | null;
 }
 
+// ─── Study Plans ────────────────────────────────────────────────────────────
+
+export type StudyPlanStatus = "active" | "completed" | "archived";
+export type StudyPlanItemStatus = "pending" | "in_progress" | "completed" | "skipped";
+
+export interface StudyPlanItem {
+  id: string;
+  study_plan_id: string;
+  document_id: string | null;
+  topic: string | null;
+  scheduled_date: string | null;
+  estimated_minutes: number | null;
+  status: StudyPlanItemStatus;
+  completed_at: string | null;
+}
+
+export interface StudyPlan {
+  id: string;
+  user_id: string;
+  title: string | null;
+  goal: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: StudyPlanStatus;
+  created_at: string;
+  items: StudyPlanItem[];
+}
+
+export interface StudyPlanListResponse {
+  data: StudyPlan[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
 // ─── Flashcards ─────────────────────────────────────────────────────────────
 
 export interface Flashcard {
@@ -305,6 +340,25 @@ export const api = {
 
   completeQuizAttempt: (token: string, attemptId: string) =>
     apiFetch<QuizAttempt>(`/v1/quiz-attempts/${attemptId}/complete`, token, { method: "POST" }),
+
+  // Study plans
+  createStudyPlan: (token: string, body: { title?: string; goal?: string; start_date?: string; end_date?: string }) =>
+    apiFetch<StudyPlan>("/v1/study-plans", token, { method: "POST", body: JSON.stringify(body) }),
+
+  listStudyPlans: (token: string, page = 1, pageSize = 20) =>
+    apiFetch<StudyPlanListResponse>(`/v1/study-plans?page=${page}&page_size=${pageSize}`, token),
+
+  getStudyPlan: (token: string, planId: string) =>
+    apiFetch<StudyPlan>(`/v1/study-plans/${planId}`, token),
+
+  createStudyPlanItem: (
+    token: string,
+    planId: string,
+    body: { document_id?: string; topic?: string; scheduled_date?: string; estimated_minutes?: number },
+  ) => apiFetch<StudyPlanItem>(`/v1/study-plans/${planId}/items`, token, { method: "POST", body: JSON.stringify(body) }),
+
+  patchStudyPlanItem: (token: string, itemId: string, body: { status?: StudyPlanItemStatus; scheduled_date?: string; estimated_minutes?: number }) =>
+    apiFetch<StudyPlanItem>(`/v1/study-plan-items/${itemId}`, token, { method: "PATCH", body: JSON.stringify(body) }),
 
   // Flashcards
   generateFlashcards: (token: string, body: { document_id?: string; topic_id?: string; card_count?: number }) =>
