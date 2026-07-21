@@ -367,3 +367,63 @@ class FlashcardListResponse(BaseModel):
 
 class FlashcardReviewPatch(BaseModel):
     is_known: bool
+
+
+# ─── Career foundation (Phase 3) ───────────────────────────────────────────
+
+class CareerProfilePatch(BaseModel):
+    headline: Optional[str] = None
+    target_role: Optional[str] = None
+    target_company: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    github_url: Optional[str] = None
+    resume_document_id: Optional[UUID4] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_read_only_fields(cls, data: dict) -> dict:
+        if not isinstance(data, dict):
+            return data
+        bad = set(data) & _SERVER_MANAGED.union({"user_id"})
+        if bad:
+            raise ValueError(f"Field(s) {sorted(bad)} are read-only.")
+        return data
+
+
+class CareerProfileResponse(BaseModel):
+    id: UUID4
+    user_id: UUID4
+    headline: Optional[str] = None
+    target_role: Optional[str] = None
+    target_company: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    github_url: Optional[str] = None
+    resume_document_id: Optional[UUID4] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserSkillCreate(BaseModel):
+    skill_name: str
+    category: Optional[str] = None
+    proficiency_level: Optional[str] = None
+    evidence: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_skill(self):
+        self.skill_name = self.skill_name.strip()
+        if not self.skill_name:
+            raise ValueError("skill_name cannot be empty.")
+        if self.proficiency_level not in {None, "beginner", "intermediate", "advanced"}:
+            raise ValueError("proficiency_level must be beginner, intermediate, or advanced.")
+        return self
+
+
+class UserSkillResponse(BaseModel):
+    id: UUID4
+    user_id: UUID4
+    skill_name: str
+    category: Optional[str] = None
+    proficiency_level: Optional[str] = None
+    evidence: Optional[str] = None
+    created_at: datetime

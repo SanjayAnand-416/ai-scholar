@@ -127,6 +127,16 @@ const NAV_ITEMS: NavItem[] = [
     preview: "planner",
   },
   {
+    label: "Career Profile",
+    route: "/career",
+    Icon: Target,
+    eyebrow: "Career direction",
+    description: "Capture your role target, professional links, and the skills you can support with evidence.",
+    metric: "Phase 3",
+    accent: "rose",
+    preview: "progress",
+  },
+  {
     label: "Mind Maps",
     route: "/knowledge-graph",
     Icon: Network,

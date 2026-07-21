@@ -232,6 +232,42 @@ export interface FlashcardListResponse {
   total: number;
 }
 
+// ─── Career foundation ─────────────────────────────────────────────────────
+
+export interface CareerProfile {
+  id: string;
+  user_id: string;
+  headline: string | null;
+  target_role: string | null;
+  target_company: string | null;
+  linkedin_url: string | null;
+  github_url: string | null;
+  resume_document_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CareerProfilePatch {
+  headline?: string | null;
+  target_role?: string | null;
+  target_company?: string | null;
+  linkedin_url?: string | null;
+  github_url?: string | null;
+  resume_document_id?: string | null;
+}
+
+export type SkillLevel = "beginner" | "intermediate" | "advanced";
+
+export interface UserSkill {
+  id: string;
+  user_id: string;
+  skill_name: string;
+  category: string | null;
+  proficiency_level: SkillLevel | null;
+  evidence: string | null;
+  created_at: string;
+}
+
 // ─── Fetch helpers ─────────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
@@ -388,5 +424,23 @@ export const api = {
       const body = await res.json().catch(() => ({}));
       throw body;
     }
+  },
+
+  // Career foundation
+  getCareerProfile: (token: string) =>
+    apiFetch<CareerProfile>("/v1/career/profile", token),
+
+  patchCareerProfile: (token: string, patch: CareerProfilePatch) =>
+    apiFetch<CareerProfile>("/v1/career/profile", token, { method: "PATCH", body: JSON.stringify(patch) }),
+
+  listSkills: (token: string) =>
+    apiFetch<UserSkill[]>("/v1/career/skills", token),
+
+  saveSkill: (token: string, body: { skill_name: string; category?: string; proficiency_level?: SkillLevel; evidence?: string }) =>
+    apiFetch<UserSkill>("/v1/career/skills", token, { method: "POST", body: JSON.stringify(body) }),
+
+  deleteSkill: async (token: string, id: string) => {
+    const res = await fetch(`${API_URL}/v1/career/skills/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok && res.status !== 204) throw await res.json().catch(() => ({}));
   },
 };

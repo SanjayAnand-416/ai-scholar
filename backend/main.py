@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import get_settings
 from routers import (
     conversations,
+    career,
     documents,
     flashcards,
     knowledge_graph,
@@ -28,6 +29,7 @@ app.add_middleware(
 app.include_router(profile.router)
 app.include_router(documents.router)
 app.include_router(conversations.router)
+app.include_router(career.router)
 app.include_router(knowledge_graph.router)
 app.include_router(quizzes.router)
 app.include_router(learning_progress.router)
